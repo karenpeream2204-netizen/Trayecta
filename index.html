@@ -244,6 +244,20 @@
   .user-row .u span { font-size: 0.75rem; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; display: block; }
   .user-row .select { width: auto; flex: none; }
 
+  .field textarea {
+    width: 100%; padding: 11px 12px; border-radius: 10px; resize: vertical;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+    font-family: 'IBM Plex Sans'; font-size: 0.92rem;
+  }
+  .field textarea:focus-visible { outline: 2px solid var(--papaya); outline-offset: 2px; }
+  .ship-title { margin: 16px 0 10px; font-size: 0.95rem; }
+  .ship-info {
+    margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+    background: var(--teal-soft); font-size: 0.82rem; line-height: 1.5;
+  }
+  .ship-info b { font-weight: 600; }
+  .ship-info a { color: var(--teal-ink); text-decoration: underline; word-break: break-word; }
+
   ::-webkit-scrollbar { display: none; }
 </style>
 </head>
@@ -334,6 +348,18 @@
     <div class="modal">
       <h3>Tu pedido</h3>
       <div id="cartLines"></div>
+      <div id="shipForm" hidden>
+        <h4 class="ship-title">Datos del envío</h4>
+        <label class="field"><span>Dirección de recogida</span>
+          <input id="shipPickup" type="text" maxlength="300" autocomplete="off" placeholder="Calle, número y una referencia"></label>
+        <label class="field"><span>Dirección de entrega</span>
+          <input id="shipDelivery" type="text" maxlength="300" autocomplete="off" placeholder="Calle, número y una referencia"></label>
+        <label class="field"><span>Teléfono de contacto</span>
+          <input id="shipPhone" type="tel" inputmode="tel" maxlength="30" autocomplete="tel" placeholder="Para coordinar la entrega"></label>
+        <label class="field"><span>Nota del paquete (opcional)</span>
+          <textarea id="shipNote" rows="2" maxlength="500" placeholder="Ej. frágil, tamaño, a quién se entrega"></textarea></label>
+        <div class="form-msg error" id="shipMsg" role="alert"></div>
+      </div>
       <div class="total-row"><span>Total</span><span id="cartModalTotal">$0</span></div>
       <button class="btn btn-primary" id="checkoutBtn" onclick="checkout()">Confirmar pedido</button>
       <div style="height:8px"></div>
@@ -422,6 +448,20 @@ const db = {
     return localOrders;
   },
 
+  // Catálogo desde la tabla "products". Devuelve null si no se pudo leer
+  // (por ejemplo, si la tabla aún no existe) para usar el catálogo por defecto.
+  async getProducts() {
+    if (!USE_SUPABASE) return null;
+    const { data, error } = await supabaseClient
+      .from('products')
+      .select('id, category, name, meta, price, emoji')
+      .eq('active', true)
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true });
+    if (error) { console.error(error); return null; }
+    return data;
+  },
+
   async createOrder(order) {
     if (USE_SUPABASE) {
       const { data, error } = await supabaseClient
@@ -432,6 +472,10 @@ const db = {
           category: order.category,
           status: 'recibido',
           user_id: currentUser.id,
+          pickup_address: order.pickup_address || null,
+          delivery_address: order.delivery_address || null,
+          contact_phone: order.contact_phone || null,
+          note: order.note || null,
         }])
         .select();
       if (error) { console.error(error); return null; }
@@ -613,6 +657,7 @@ async function enterApp(user) {
 
   showView(tabs[0]);
   checkConnection();
+  await loadCatalog();
   await refreshAll();
 }
 
@@ -628,9 +673,14 @@ function startDemo() {
 }
 
 /* ============================================================
-   CATÁLOGO (esto también podría venir de una tabla "products")
+   CATÁLOGO
+   ------------------------------------------------------------
+   Con Supabase, los productos y precios salen de la tabla
+   "products" y el servidor recalcula el total de cada pedido.
+   DEFAULT_CATALOG solo se usa en modo demo o si la tabla no
+   se puede leer.
    ============================================================ */
-const CATALOG = {
+const DEFAULT_CATALOG = {
   comida: [
     { id: 'c1', name: 'Combo pollo asado + arroz', meta: 'El Fogón Criollo · 15 min', price: 8.5, emoji: '🍗' },
     { id: 'c2', name: 'Pizza mediana pepperoni', meta: 'Pizzería Nona · 20 min', price: 9.9, emoji: '🍕' },
@@ -649,12 +699,41 @@ const CATALOG = {
 };
 const CAT_LABELS = { comida: '🍔 Comida', super: '🛒 Súper', paquete: '📦 Paquetería' };
 
+let CATALOG = {};
+function setCatalog(byCat) {
+  CATALOG = {};
+  for (const cat of Object.keys(CAT_LABELS)) {
+    CATALOG[cat] = (byCat[cat] || []).map(i => ({ ...i, category: cat, price: Number(i.price) }));
+  }
+}
+setCatalog(DEFAULT_CATALOG);
+
+async function loadCatalog() {
+  const rows = await db.getProducts();
+  if (rows === null) return;            // sin tabla o sin conexión: catálogo por defecto
+  const byCat = {};
+  rows.forEach(r => { (byCat[r.category] = byCat[r.category] || []).push(r); });
+  setCatalog(byCat);
+  pickActiveCat();
+  renderCatRow();
+  renderCatalog();
+}
+
 let activeCat = 'comida';
 let cart = [];
 
+function pickActiveCat() {
+  if ((CATALOG[activeCat] || []).length) return;
+  const k = Object.keys(CAT_LABELS).find(c => (CATALOG[c] || []).length);
+  if (k) activeCat = k;
+}
+
 function renderCatRow() {
   const row = document.getElementById('catRow');
-  row.innerHTML = Object.keys(CAT_LABELS).map(k =>
+  // Solo se muestran las categorías que tienen productos activos.
+  const keys = Object.keys(CAT_LABELS).filter(k => (CATALOG[k] || []).length);
+  row.style.display = keys.length > 1 ? '' : 'none';
+  row.innerHTML = keys.map(k =>
     `<button class="cat-chip ${k===activeCat?'active':''}" onclick="setCat('${k}')">${CAT_LABELS[k]}</button>`
   ).join('');
 }
@@ -662,17 +741,18 @@ function setCat(k) { activeCat = k; renderCatRow(); renderCatalog(); }
 
 function renderCatalog() {
   const el = document.getElementById('catalog');
-  el.innerHTML = `<h2 class="section-title">${CAT_LABELS[activeCat]}</h2>` + CATALOG[activeCat].map(item => `
+  const list = CATALOG[activeCat] || [];
+  el.innerHTML = `<h2 class="section-title">${CAT_LABELS[activeCat]}</h2>` + (list.length ? list.map(item => `
     <div class="card item-card">
-      <div class="emoji">${item.emoji}</div>
+      <div class="emoji">${esc(item.emoji)}</div>
       <div class="info">
-        <strong>${item.name}</strong>
-        <span>${item.meta}</span>
+        <strong>${esc(item.name)}</strong>
+        <span>${esc(item.meta)}</span>
       </div>
       <div class="price">$${item.price.toFixed(2)}</div>
-      <button class="add-btn" onclick="addToCart('${item.id}')">+</button>
+      <button class="add-btn" onclick="addToCart('${esc(item.id)}')">+</button>
     </div>
-  `).join('');
+  `).join('') : `<div class="empty">Aún no hay productos en esta categoría.</div>`);
 }
 
 function findItem(id) {
@@ -684,6 +764,7 @@ function findItem(id) {
 
 function addToCart(id) {
   const item = findItem(id);
+  if (!item) return;
   const existing = cart.find(c => c.id === id);
   if (existing) existing.qty++; else cart.push({ ...item, qty: 1 });
   renderCartBar();
@@ -701,33 +782,74 @@ function renderCartBar() {
   document.getElementById('cartCount').textContent = `${count} artículo${count>1?'s':''}`;
   document.getElementById('cartTotal').textContent = `$${cartTotal().toFixed(2)}`;
 }
+function needsShipping() { return cart.some(c => c.category === 'paquete'); }
+function fieldVal(id) { return document.getElementById(id).value.trim(); }
+function setShipMsg(t) { document.getElementById('shipMsg').textContent = t || ''; }
+
+function mapLink(addr) {
+  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr || '');
+}
+function shipInfo(o) {
+  if (!o.pickup_address && !o.delivery_address) return '';
+  const phone = String(o.contact_phone || '').replace(/[^\d+]/g, '');
+  return `<div class="ship-info">
+    <div><b>Recoger:</b> <a href="${esc(mapLink(o.pickup_address))}" target="_blank" rel="noopener">${esc(o.pickup_address)}</a></div>
+    <div><b>Entregar:</b> <a href="${esc(mapLink(o.delivery_address))}" target="_blank" rel="noopener">${esc(o.delivery_address)}</a></div>
+    ${phone ? `<div><b>Teléfono:</b> <a href="tel:${esc(phone)}">${esc(o.contact_phone)}</a></div>` : ''}
+    ${o.note ? `<div><b>Nota:</b> ${esc(o.note)}</div>` : ''}
+  </div>`;
+}
+
 function openCart() { renderCartModal(); document.getElementById('cartModal').classList.add('open'); }
 function closeCart() { document.getElementById('cartModal').classList.remove('open'); }
 function renderCartModal() {
   const el = document.getElementById('cartLines');
   el.innerHTML = cart.map(c => `
     <div class="cart-line">
-      <span>${c.qty}x ${c.name}</span>
-      <span style="display:flex;align-items:center;gap:10px">$${(c.price*c.qty).toFixed(2)} <button onclick="removeFromCart('${c.id}')">Quitar</button></span>
+      <span>${esc(c.qty)}x ${esc(c.name)}</span>
+      <span style="display:flex;align-items:center;gap:10px">$${(c.price*c.qty).toFixed(2)} <button onclick="removeFromCart('${esc(c.id)}')">Quitar</button></span>
     </div>
   `).join('') || '<p style="color:var(--ink-soft);font-size:0.85rem">Tu carrito está vacío.</p>';
   document.getElementById('cartModalTotal').textContent = `$${cartTotal().toFixed(2)}`;
+  document.getElementById('shipForm').hidden = !needsShipping();
+  setShipMsg('');
 }
 
 async function checkout() {
   if (cart.length === 0) return;
+
+  // Los envíos de paquete necesitan direcciones y teléfono.
+  let ship = {};
+  if (needsShipping()) {
+    ship = {
+      pickup_address: fieldVal('shipPickup'),
+      delivery_address: fieldVal('shipDelivery'),
+      contact_phone: fieldVal('shipPhone'),
+      note: fieldVal('shipNote'),
+    };
+    if (ship.pickup_address.length < 5) { setShipMsg('Escribe la dirección de recogida.'); return; }
+    if (ship.delivery_address.length < 5) { setShipMsg('Escribe la dirección de entrega.'); return; }
+    if (ship.contact_phone.replace(/\D/g, '').length < 7) { setShipMsg('Escribe un teléfono de contacto válido.'); return; }
+  }
+  setShipMsg('');
+
   const btn = document.getElementById('checkoutBtn');
   btn.disabled = true; btn.textContent = 'Enviando pedido...';
 
-  const category = cart[0].id.startsWith('c') ? 'comida' : cart[0].id.startsWith('s') ? 'super' : 'paquete';
-  const order = await db.createOrder({ items: [...cart], total: cartTotal(), category });
+  const category = cart[0].category || 'comida';
+  const order = await db.createOrder({ items: [...cart], total: cartTotal(), category, ...ship });
 
   btn.disabled = false; btn.textContent = 'Confirmar pedido';
   if (!order) {
-    alert('No se pudo enviar el pedido. Revisa tu conexión e inténtalo de nuevo.');
+    alert('No se pudo enviar el pedido. Puede que un producto ya no esté disponible o que haya cambiado de precio. Revisa el catálogo e inténtalo de nuevo.');
+    cart = [];
+    renderCartBar();
+    closeCart();
+    await loadCatalog();
     return;
   }
   cart = [];
+  ['shipPickup', 'shipDelivery', 'shipPhone', 'shipNote'].forEach(id => { document.getElementById(id).value = ''; });
   renderCartBar();
   closeCart();
 
@@ -756,6 +878,7 @@ async function renderRiderOrders() {
         <span class="badge ${o.status==='camino'?'camino':o.status==='entregado'?'entregado':''}">${STATUS_LABEL[o.status]}</span>
       </div>
       <div class="meta">${o.items.map(i=>esc(i.qty)+'x '+esc(i.name)).join(', ')} · $${Number(o.total).toFixed(2)}</div>
+      ${shipInfo(o)}
       ${statusTrack(o.status)}
       ${o.status !== 'entregado' ? `<button class="btn btn-teal" style="margin-top:10px" onclick="advanceOrder(${o.id})">Marcar como ${STATUS_LABEL[STATUS_FLOW[STATUS_FLOW.indexOf(o.status)+1]]}</button>` : ''}
     </div>
@@ -798,6 +921,7 @@ async function renderMyOrders() {
         <span class="badge ${o.status==='camino'?'camino':o.status==='entregado'?'entregado':''}">${STATUS_LABEL[o.status]}</span>
       </div>
       <div class="meta">${o.items.map(i=>esc(i.qty)+'x '+esc(i.name)).join(', ')} · $${Number(o.total).toFixed(2)}</div>
+      ${shipInfo(o)}
       ${statusTrack(o.status)}
     </div>
   `).join('');
@@ -855,6 +979,7 @@ async function renderAdmin() {
           <span class="badge ${o.status==='camino'?'camino':o.status==='entregado'?'entregado':''}">${STATUS_LABEL[o.status]}</span>
         </div>
         <div class="meta">${o.items.map(i=>esc(i.qty)+'x '+esc(i.name)).join(', ')} · $${Number(o.total).toFixed(2)}</div>
+        ${shipInfo(o)}
         ${USE_SUPABASE && o.status !== 'entregado' ? `
           <div class="assign-row">
             <label for="rider-${o.id}">Repartidor</label>
