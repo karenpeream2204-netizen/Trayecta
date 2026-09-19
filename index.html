@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trayecta — Delivery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root {
+    --bg: #EFEAE1;
+    --surface: #FFFFFF;
+    --ink: #1C1B19;
+    --ink-soft: #5B5650;
+    --line: #DAD3C6;
+    --papaya: #FF6B35;
+    --papaya-dark: #E0501C;
+    --teal: #1B4B43;
+    --teal-soft: #E4EEEB;
+    --amarillo: #F2A93B;
+    --danger: #C4432B;
+    --radius-card: 14px;
+    --radius-pill: 999px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17201D;
+      --surface: #1F2A26;
+      --ink: #F3EFE6;
+      --ink-soft: #B7AF9F;
+      --line: #33403B;
+      --teal-soft: #22322C;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17201D;
+    --surface: #1F2A26;
+    --ink: #F3EFE6;
+    --ink-soft: #B7AF9F;
+    --line: #33403B;
+    --teal-soft: #22322C;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, .display { font-family: 'Space Grotesk', system-ui, sans-serif; }
+  .app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+
+  .conn-banner {
+    font-size: 0.72rem; text-align: center; padding: 5px 10px;
+    background: var(--amarillo); color: #3A2A00; font-weight: 600;
+  }
+  .conn-banner.live { background: var(--teal); color: #fff; }
+
+  header.top {
+    padding: 22px 20px 16px;
+    background: var(--teal);
+    color: #fff;
+    border-radius: 0 0 22px 22px;
+  }
+  header.top .brand { display: flex; align-items: center; gap: 10px; }
+  header.top .brand .mark {
+    width: 38px; height: 38px; border-radius: 10px;
+    background: var(--papaya);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  header.top h1 { margin: 0; font-size: 1.3rem; letter-spacing: -0.01em; }
+  header.top p { margin: 4px 0 0; font-size: 0.85rem; color: #D9E6E1; }
+
+  nav.roles {
+    display: flex; gap: 6px;
+    margin: 16px 20px 0;
+    background: var(--surface);
+    padding: 5px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--line);
+  }
+  nav.roles button {
+    flex: 1; border: none; background: transparent; padding: 9px 4px;
+    border-radius: var(--radius-pill); font-family: 'IBM Plex Sans';
+    font-size: 0.82rem; font-weight: 600; color: var(--ink-soft);
+    cursor: pointer; transition: background .15s ease, color .15s ease;
+  }
+  nav.roles button.active { background: var(--papaya); color: #fff; }
+
+  main { flex: 1; padding: 18px 20px 90px; }
+  section.view { display: none; animation: fade .2s ease; }
+  section.view.active { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  .section-title { font-size: 1rem; margin: 22px 0 10px; }
+  .section-title:first-child { margin-top: 4px; }
+
+  .cat-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+  .cat-chip {
+    flex: none; padding: 7px 14px; border-radius: var(--radius-pill);
+    border: 1px solid var(--line); background: var(--surface);
+    font-size: 0.8rem; font-weight: 600; cursor: pointer; color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  .cat-chip.active { background: var(--teal); color: #fff; border-color: var(--teal); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius-card); padding: 14px;
+    margin-bottom: 10px;
+  }
+  .item-card { display: flex; align-items: center; gap: 12px; }
+  .item-card .emoji { font-size: 1.6rem; width: 44px; height: 44px; background: var(--teal-soft);
+    border-radius: 12px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .item-card .info { flex: 1; min-width: 0; }
+  .item-card .info strong { display: block; font-size: 0.92rem; }
+  .item-card .info span { font-size: 0.78rem; color: var(--ink-soft); }
+  .item-card .price { font-weight: 600; font-size: 0.88rem; margin-right: 6px; }
+  .add-btn {
+    width: 30px; height: 30px; border-radius: 50%; border: none;
+    background: var(--papaya); color: #fff; font-size: 1.1rem; cursor: pointer;
+    line-height: 1;
+  }
+
+  .cart-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    display: flex; justify-content: center; pointer-events: none;
+  }
+  .cart-bar .inner {
+    pointer-events: auto;
+    max-width: 480px; width: 100%; margin: 0 auto;
+    background: var(--papaya); color: #fff;
+    padding: 13px 20px; display: flex; justify-content: space-between; align-items: center;
+    border-radius: 16px 16px 0 0; font-weight: 600; cursor: pointer;
+    box-shadow: 0 -6px 18px rgba(0,0,0,.15);
+  }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 11px 16px; border-radius: 10px; border: none;
+    font-family: 'IBM Plex Sans'; font-weight: 600; font-size: 0.88rem; cursor: pointer;
+    width: 100%;
+  }
+  .btn-primary { background: var(--papaya); color: #fff; }
+  .btn-outline { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+  .btn-teal { background: var(--teal); color: #fff; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(20,18,16,.5);
+    display: none; align-items: flex-end; justify-content: center; z-index: 30;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); width: 100%; max-width: 480px;
+    border-radius: 20px 20px 0 0; padding: 20px; max-height: 82vh; overflow-y: auto;
+  }
+  .modal h3 { margin: 0 0 12px; }
+  .cart-line { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 0.88rem; }
+  .cart-line button { border: none; background: none; color: var(--danger); font-size: 0.78rem; cursor: pointer; }
+  .total-row { display: flex; justify-content: space-between; font-weight: 700; margin: 14px 0; font-size: 1rem; }
+
+  .route-box { background: var(--teal-soft); border-radius: 14px; padding: 14px; margin: 14px 0; }
+  .route-box svg { width: 100%; height: auto; display: block; }
+
+  .status-track { display: flex; align-items: center; margin: 16px 0 4px; }
+  .status-step { flex: 1; text-align: center; position: relative; }
+  .status-step .dot { width: 22px; height: 22px; border-radius: 50%; background: var(--line); margin: 0 auto 6px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.7rem; }
+  .status-step.done .dot { background: var(--teal); }
+  .status-step.current .dot { background: var(--papaya); }
+  .status-step span { font-size: 0.68rem; color: var(--ink-soft); }
+  .status-line { position: absolute; top: 11px; left: -50%; right: 50%; height: 2px; background: var(--line); z-index: -1; }
+  .status-step.done .status-line, .status-step.current .status-line { background: var(--teal); }
+  .status-step:first-child .status-line { display: none; }
+
+  .order-card { border-left: 4px solid var(--papaya); }
+  .order-card.entregado { border-left-color: var(--teal); opacity: .7; }
+  .order-card .meta { font-size: 0.75rem; color: var(--ink-soft); margin: 2px 0 8px; }
+  .badge { display: inline-block; font-size: 0.68rem; font-weight: 600; padding: 3px 9px; border-radius: var(--radius-pill); background: var(--amarillo); color: #3A2A00; }
+  .badge.entregado { background: var(--teal-soft); color: var(--teal); }
+  .badge.camino { background: var(--papaya); color: #fff; }
+
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .stat-card .num { font-family: 'Space Grotesk'; font-size: 1.5rem; font-weight: 700; }
+  .stat-card .lab { font-size: 0.75rem; color: var(--ink-soft); }
+
+  .empty { text-align: center; padding: 40px 10px; color: var(--ink-soft); font-size: 0.88rem; }
+  .empty .e { font-size: 2rem; display: block; margin-bottom: 8px; }
+
+  ::-webkit-scrollbar { display: none; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="conn-banner" id="connBanner">Modo demo — datos en memoria, sin backend conectado</div>
+
+  <header class="top">
+    <div class="brand">
+      <div class="mark">🛵</div>
+      <div>
+        <h1>Trayecta</h1>
+        <p>Comida, súper y paquetería, sin vueltas</p>
+      </div>
+    </div>
+    <nav class="roles">
+      <button class="active" data-role="cliente">Cliente</button>
+      <button data-role="repartidor">Repartidor</button>
+      <button data-role="admin">Admin</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- CLIENTE -->
+    <section class="view active" id="view-cliente">
+      <div class="cat-row" id="catRow"></div>
+      <div id="catalog"></div>
+    </section>
+
+    <!-- REPARTIDOR -->
+    <section class="view" id="view-repartidor">
+      <h2 class="section-title">Pedidos asignados</h2>
+      <div id="riderOrders"></div>
+    </section>
+
+    <!-- ADMIN -->
+    <section class="view" id="view-admin">
+      <h2 class="section-title">Hoy en Trayecta</h2>
+      <div class="stat-grid" id="statGrid"></div>
+      <div class="route-box">
+        <svg viewBox="0 0 300 90" id="chartSvg"></svg>
+      </div>
+      <h2 class="section-title">Todos los pedidos</h2>
+      <div id="adminOrders"></div>
+    </section>
+  </main>
+
+  <div class="cart-bar" id="cartBar" style="display:none">
+    <div class="inner" onclick="openCart()">
+      <span id="cartCount">0 artículos</span>
+      <span id="cartTotal">$0</span>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="cartModal">
+    <div class="modal">
+      <h3>Tu pedido</h3>
+      <div id="cartLines"></div>
+      <div class="total-row"><span>Total</span><span id="cartModalTotal">$0</span></div>
+      <button class="btn btn-primary" id="checkoutBtn" onclick="checkout()">Confirmar pedido</button>
+      <div style="height:8px"></div>
+      <button class="btn btn-outline" onclick="closeCart()">Seguir comprando</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal">
+      <h3>¡Pedido en camino a asignarse! 🎉</h3>
+      <div class="route-box">
+        <svg viewBox="0 0 300 100">
+          <line x1="20" y1="80" x2="280" y2="20" stroke="var(--teal)" stroke-width="3" stroke-dasharray="6 6"/>
+          <circle cx="20" cy="80" r="7" fill="var(--teal)"/>
+          <circle cx="280" cy="20" r="7" fill="var(--papaya)"/>
+          <text x="14" y="98" font-size="10" fill="var(--ink)">Comercio</text>
+          <text x="238" y="14" font-size="10" fill="var(--ink)">Tu casa</text>
+        </svg>
+      </div>
+      <p style="font-size:0.85rem;color:var(--ink-soft)">Tiempo estimado: <strong id="etaText">28-35 min</strong> según ruta y tráfico actual.</p>
+      <button class="btn btn-teal" onclick="closeConfirm()">Entendido</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ============================================================
+   CAPA DE DATOS (db)
+   ------------------------------------------------------------
+   Esta sección es lo único que hay que tocar para conectar la
+   app a un backend real. Hoy usa un arreglo en memoria (modo
+   demo). Para conectarla a Supabase:
+
+   1) Crea un proyecto en https://supabase.com
+   2) Crea una tabla "orders" con columnas:
+        id          bigint (identity, primary key)
+        items       jsonb
+        total       numeric
+        category    text        -- 'comida' | 'super' | 'paquete'
+        status      text        -- 'recibido' | 'camino' | 'entregado'
+        created_at  timestamptz default now()
+   3) Pega tu Project URL y anon public key abajo en CONFIG.
+   4) Listo — las funciones de abajo detectan la config y
+      cambian solas de modo demo a modo conectado.
+
+   IMPORTANT (solo mientras pruebas esto dentro de un Artifact
+   de Claude): las páginas publicadas aquí solo pueden llamar a
+   una lista corta de dominios (CDNs de scripts y fuentes), así
+   que las llamadas reales a Supabase se bloquearán en esta
+   vista previa aunque las credenciales sean correctas. El
+   código ya queda listo: funcionará en cuanto exportes este
+   mismo archivo .html y lo alojes tú (Vercel, Netlify, tu propio
+   servidor, etc.), sin cambiar una sola línea.
+   ============================================================ */
+
+const CONFIG = {
+  SUPABASE_URL: 'https://gjpnmylsstpqlvnqsofh.supabase.co',
+  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdqcG5teWxzc3RwcWx2bnFzb2ZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3NjQyNjEsImV4cCI6MjEwNTM0MDI2MX0.mu5WM0dkYKHl6jAEj9zKILijQ410bzg7GD09gL38qcM',
+};
+
+// Escapa texto que viene de la base de datos antes de meterlo en el HTML
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+const USE_SUPABASE = Boolean(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
+const supabaseClient = USE_SUPABASE
+  ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
+  : null;
+
+// Estado local de respaldo (modo demo, se pierde al recargar)
+let localOrders = [];
+let localSeq = 1001;
+
+const db = {
+  async getOrders() {
+    if (USE_SUPABASE) {
+      const { data, error } = await supabaseClient
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) { console.error(error); return localOrders; }
+      return data;
+    }
+    return localOrders;
+  },
+
+  async createOrder(order) {
+    if (USE_SUPABASE) {
+      const { data, error } = await supabaseClient
+        .from('orders')
+        .insert([{
+          items: order.items,
+          total: order.total,
+          category: order.category,
+          status: 'recibido',
+        }])
+        .select();
+      if (error) { console.error(error); return null; }
+      return data[0];
+    }
+    const newOrder = { ...order, id: localSeq++, status: 'recibido', created_at: new Date().toISOString() };
+    localOrders.unshift(newOrder);
+    return newOrder;
+  },
+
+  async updateStatus(id, status) {
+    if (USE_SUPABASE) {
+      const { error } = await supabaseClient.from('orders').update({ status }).eq('id', id);
+      if (error) console.error(error);
+      return;
+    }
+    const o = localOrders.find(o => o.id === id);
+    if (o) o.status = status;
+  },
+
+  // Tiempo real: cuando alguien más cambia un pedido, refresca la vista.
+  // Se activa solo si hay conexión a Supabase configurada.
+  subscribeToChanges(callback) {
+    if (!USE_SUPABASE) return;
+    supabaseClient
+      .channel('orders-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, callback)
+      .subscribe();
+  }
+};
+
+/* ============================================================
+   CATÁLOGO (esto también podría venir de una tabla "products")
+   ============================================================ */
+const CATALOG = {
+  comida: [
+    { id: 'c1', name: 'Combo pollo asado + arroz', meta: 'El Fogón Criollo · 15 min', price: 8.5, emoji: '🍗' },
+    { id: 'c2', name: 'Pizza mediana pepperoni', meta: 'Pizzería Nona · 20 min', price: 9.9, emoji: '🍕' },
+    { id: 'c3', name: 'Ensalada César con pollo', meta: 'Verde Vida · 12 min', price: 6.2, emoji: '🥗' },
+  ],
+  super: [
+    { id: 's1', name: 'Canasta básica (leche, huevos, pan)', meta: 'Súper La Económica', price: 12.0, emoji: '🛒' },
+    { id: 's2', name: 'Agua 6 botellas 1.5L', meta: 'Súper La Económica', price: 4.5, emoji: '💧' },
+    { id: 's3', name: 'Frutas y verduras surtidas', meta: 'Mercado Central', price: 7.3, emoji: '🥦' },
+  ],
+  paquete: [
+    { id: 'p1', name: 'Envío de sobre / documento', meta: 'Recogida en punto A', price: 3.0, emoji: '✉️' },
+    { id: 'p2', name: 'Paquete pequeño (hasta 5kg)', meta: 'Recogida en punto A', price: 5.5, emoji: '📦' },
+    { id: 'p3', name: 'Paquete mediano (hasta 15kg)', meta: 'Recogida en punto A', price: 8.0, emoji: '🧳' },
+  ]
+};
+const CAT_LABELS = { comida: '🍔 Comida', super: '🛒 Súper', paquete: '📦 Paquetería' };
+
+let activeCat = 'comida';
+let cart = [];
+
+function renderCatRow() {
+  const row = document.getElementById('catRow');
+  row.innerHTML = Object.keys(CAT_LABELS).map(k =>
+    `<button class="cat-chip ${k===activeCat?'active':''}" onclick="setCat('${k}')">${CAT_LABELS[k]}</button>`
+  ).join('');
+}
+function setCat(k) { activeCat = k; renderCatRow(); renderCatalog(); }
+
+function renderCatalog() {
+  const el = document.getElementById('catalog');
+  el.innerHTML = `<h2 class="section-title">${CAT_LABELS[activeCat]}</h2>` + CATALOG[activeCat].map(item => `
+    <div class="card item-card">
+      <div class="emoji">${item.emoji}</div>
+      <div class="info">
+        <strong>${item.name}</strong>
+        <span>${item.meta}</span>
+      </div>
+      <div class="price">$${item.price.toFixed(2)}</div>
+      <button class="add-btn" onclick="addToCart('${item.id}')">+</button>
+    </div>
+  `).join('');
+}
+
+function findItem(id) {
+  for (const cat of Object.values(CATALOG)) {
+    const found = cat.find(i => i.id === id);
+    if (found) return found;
+  }
+}
+
+function addToCart(id) {
+  const item = findItem(id);
+  const existing = cart.find(c => c.id === id);
+  if (existing) existing.qty++; else cart.push({ ...item, qty: 1 });
+  renderCartBar();
+}
+function removeFromCart(id) {
+  cart = cart.filter(c => c.id !== id);
+  renderCartBar(); renderCartModal();
+}
+function cartTotal() { return cart.reduce((s, c) => s + c.price * c.qty, 0); }
+function renderCartBar() {
+  const bar = document.getElementById('cartBar');
+  const count = cart.reduce((s, c) => s + c.qty, 0);
+  if (count === 0) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  document.getElementById('cartCount').textContent = `${count} artículo${count>1?'s':''}`;
+  document.getElementById('cartTotal').textContent = `$${cartTotal().toFixed(2)}`;
+}
+function openCart() { renderCartModal(); document.getElementById('cartModal').classList.add('open'); }
+function closeCart() { document.getElementById('cartModal').classList.remove('open'); }
+function renderCartModal() {
+  const el = document.getElementById('cartLines');
+  el.innerHTML = cart.map(c => `
+    <div class="cart-line">
+      <span>${c.qty}x ${c.name}</span>
+      <span style="display:flex;align-items:center;gap:10px">$${(c.price*c.qty).toFixed(2)} <button onclick="removeFromCart('${c.id}')">Quitar</button></span>
+    </div>
+  `).join('') || '<p style="color:var(--ink-soft);font-size:0.85rem">Tu carrito está vacío.</p>';
+  document.getElementById('cartModalTotal').textContent = `$${cartTotal().toFixed(2)}`;
+}
+
+async function checkout() {
+  if (cart.length === 0) return;
+  const btn = document.getElementById('checkoutBtn');
+  btn.disabled = true; btn.textContent = 'Enviando pedido...';
+
+  const category = cart[0].id.startsWith('c') ? 'comida' : cart[0].id.startsWith('s') ? 'super' : 'paquete';
+  const order = await db.createOrder({ items: [...cart], total: cartTotal(), category });
+
+  btn.disabled = false; btn.textContent = 'Confirmar pedido';
+  if (!order) {
+    alert('No se pudo enviar el pedido. Revisa tu conexión e inténtalo de nuevo.');
+    return;
+  }
+  cart = [];
+  renderCartBar();
+  closeCart();
+
+  document.getElementById('etaText').textContent = category === 'paquete' ? '18-25 min' : '28-35 min';
+  document.getElementById('confirmModal').classList.add('open');
+
+  await refreshAll();
+}
+function closeConfirm() { document.getElementById('confirmModal').classList.remove('open'); }
+
+// ---- REPARTIDOR ----
+const STATUS_FLOW = ['recibido', 'camino', 'entregado'];
+const STATUS_LABEL = { recibido: 'Recibido', camino: 'En camino', entregado: 'Entregado' };
+
+async function renderRiderOrders() {
+  const orders = await db.getOrders();
+  const el = document.getElementById('riderOrders');
+  if (orders.length === 0) {
+    el.innerHTML = `<div class="empty"><span class="e">🛵</span>Aún no hay pedidos para repartir.</div>`;
+    return;
+  }
+  el.innerHTML = orders.map(o => `
+    <div class="card order-card ${o.status==='entregado'?'entregado':''}">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong>Pedido #${o.id}</strong>
+        <span class="badge ${o.status==='camino'?'camino':o.status==='entregado'?'entregado':''}">${STATUS_LABEL[o.status]}</span>
+      </div>
+      <div class="meta">${o.items.map(i=>esc(i.qty)+'x '+esc(i.name)).join(', ')} · $${Number(o.total).toFixed(2)}</div>
+      ${statusTrack(o.status)}
+      ${o.status !== 'entregado' ? `<button class="btn btn-teal" style="margin-top:10px" onclick="advanceOrder(${o.id})">Marcar como ${STATUS_LABEL[STATUS_FLOW[STATUS_FLOW.indexOf(o.status)+1]]}</button>` : ''}
+    </div>
+  `).join('');
+}
+function statusTrack(status) {
+  const idx = STATUS_FLOW.indexOf(status);
+  return `<div class="status-track">` + STATUS_FLOW.map((s, i) => `
+    <div class="status-step ${i<idx?'done':i===idx?'current':''}">
+      ${i>0?'<div class="status-line"></div>':''}
+      <div class="dot">${i<idx?'✓':i+1}</div>
+      <span>${STATUS_LABEL[s]}</span>
+    </div>
+  `).join('') + `</div>`;
+}
+async function advanceOrder(id) {
+  const orders = await db.getOrders();
+  const order = orders.find(o => o.id === id);
+  const idx = STATUS_FLOW.indexOf(order.status);
+  if (idx < STATUS_FLOW.length - 1) {
+    await db.updateStatus(id, STATUS_FLOW[idx+1]);
+  }
+  await refreshAll();
+}
+
+// ---- ADMIN ----
+async function renderAdmin() {
+  const orders = await db.getOrders();
+  const total = orders.length;
+  const revenue = orders.reduce((s,o) => s + Number(o.total), 0);
+  const entregados = orders.filter(o => o.status === 'entregado').length;
+  const enCurso = total - entregados;
+  document.getElementById('statGrid').innerHTML = `
+    <div class="stat-card"><div class="num">${total}</div><div class="lab">Pedidos hoy</div></div>
+    <div class="stat-card"><div class="num">$${revenue.toFixed(2)}</div><div class="lab">Ingresos</div></div>
+    <div class="stat-card"><div class="num">${enCurso}</div><div class="lab">En curso</div></div>
+    <div class="stat-card"><div class="num">${entregados}</div><div class="lab">Entregados</div></div>
+  `;
+  const counts = { comida: 0, super: 0, paquete: 0 };
+  orders.forEach(o => counts[o.category]++);
+  const max = Math.max(1, ...Object.values(counts));
+  const labels = Object.keys(counts);
+  const barW = 60, gap = 30, base = 80;
+  let svg = '';
+  labels.forEach((k, i) => {
+    const h = (counts[k] / max) * 55;
+    const x = 20 + i * (barW + gap);
+    svg += `<rect x="${x}" y="${base-h}" width="${barW}" height="${h}" rx="5" fill="var(--papaya)"/>
+            <text x="${x+barW/2}" y="${base+14}" font-size="10" text-anchor="middle" fill="var(--ink)">${CAT_LABELS[k].split(' ')[1]}</text>
+            <text x="${x+barW/2}" y="${base-h-6}" font-size="10" text-anchor="middle" fill="var(--ink)">${counts[k]}</text>`;
+  });
+  document.getElementById('chartSvg').innerHTML = svg;
+
+  const el = document.getElementById('adminOrders');
+  el.innerHTML = orders.length === 0
+    ? `<div class="empty"><span class="e">📋</span>No se han registrado pedidos todavía.</div>`
+    : orders.map(o => `
+      <div class="card order-card ${o.status==='entregado'?'entregado':''}">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <strong>#${o.id} · ${CAT_LABELS[o.category]}</strong>
+          <span class="badge ${o.status==='camino'?'camino':o.status==='entregado'?'entregado':''}">${STATUS_LABEL[o.status]}</span>
+        </div>
+        <div class="meta">${o.items.map(i=>esc(i.qty)+'x '+esc(i.name)).join(', ')} · $${Number(o.total).toFixed(2)}</div>
+      </div>
+    `).join('');
+}
+
+async function refreshAll() {
+  await Promise.all([renderRiderOrders(), renderAdmin()]);
+}
+
+// ---- NAV ----
+document.querySelectorAll('nav.roles button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav.roles button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('section.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + btn.dataset.role).classList.add('active');
+  });
+});
+
+// ---- INIT ----
+const banner = document.getElementById('connBanner');
+async function checkConnection() {
+  if (!USE_SUPABASE) {
+    banner.textContent = 'Modo demo — datos en memoria, sin backend conectado';
+    return;
+  }
+  const { error } = await supabaseClient.from('orders').select('id', { head: true, count: 'exact' });
+  if (error) {
+    console.error(error);
+    banner.textContent = '🟠 Supabase configurado pero sin acceso a "orders" — revisa la tabla y las políticas RLS';
+    return;
+  }
+  banner.textContent = '🟢 Conectado a Supabase — datos en tiempo real';
+  banner.classList.add('live');
+  db.subscribeToChanges(() => refreshAll());
+}
+checkConnection();
+
+renderCatRow();
+renderCatalog();
+refreshAll();
+</script>
+</body>
+</html>
